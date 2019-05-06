@@ -3,6 +3,8 @@ gameserver
 
 The gameserver exists as 2 separate executables, a **ticker** that periodically pings vulnboxes, and a **web** server that listens for requests to submit flags(and also displays a scoreboard).
 
+**NOTE:** Please do not deploy any part of this codebase as-is without reading if you are running an attack-defense CTF. This was massively hacked together a couple days before the CTF and is about 2,000 lines of potentially broken async code.
+
 Ticker Configuration
 --------------------
 
