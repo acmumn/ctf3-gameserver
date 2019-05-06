@@ -1,0 +1,150 @@
+{% import "util.html" as util %}
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>CTF Scoreboard</title>
+        <style>
+            body {
+                font-family: sans-serif;
+            }
+
+            table#data td {
+                vertical-align: top;
+            }
+        </style>
+    </head>
+
+    <body>
+        <pre style="font-size: 1.3em;">       _|_|      _|_|_|  _|      _|        _|_|_|  _|_|_|_|_|  _|_|_|_|      _|_|_|
+     _|    _|  _|        _|_|  _|_|      _|            _|      _|                  _|
+     _|_|_|_|  _|        _|  _|  _|      _|            _|      _|_|_|          _|_|
+     _|    _|  _|        _|      _|      _|            _|      _|                  _|
+     _|    _|    _|_|_|  _|      _|        _|_|_|      _|      _|            _|_|_|</pre>
+
+        <p>
+            Round Start Time: {{ util::timeformat(sec=round_start_ago) }} ago <br />
+            Round Length: {{ util::timeformat(sec=round_length) }} <br />
+            Approximate Remaining Time: {{ util::timeformat(sec=remaining_time) }}
+        </p>
+
+        <h2>Score Summary</h2>
+        <table border=1>
+            <thead>
+                <tr>
+                    <th>Team ID</th>
+                    <th>Attack Score</th>
+                    <th>Defense Score</th>
+                    <th>Up Score</th>
+                    <th>Total Score</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for team in teams | sort(attribute="total_score") | reverse %}
+                    <tr>
+                        <td>{{ team.id }}</td>
+                        <td>{{ team.atk_score }}</td>
+                        <td>{{ team.def_score }}</td>
+                        <td>{{ team.up_score }}</td>
+                        <td>{{ team.total_score }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <table id="data">
+            <tr>
+                {% if show_left %}<td>
+
+        <h2>Breakdown</h2>
+        <table border=1>
+            <thead>
+                <tr>
+                    <th>Round</th>
+                    {% for team in teams | sort(attribute="id") %}
+                        <th>Team {{ team.id }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for tick in ticks %}
+                    <tr>
+                        <td>{{ tick.number }}</td>
+                        {% for team in teams | sort(attribute="id") %}
+                            {% set team_id = team.id | as_str -%}
+                            <td>
+                                <table>
+                                    {% if tick.data is containing(team_id) %}
+                                        {% for name, flag in tick.data[team_id] %}
+                                            <tr>
+                                                <td>{{ name }}</td>
+                                                <td>
+                                                    {% if flag.claimed_by %}
+                                                        <span style="color: red;">claimed_by&nbsp;{{ flag.claimed_by }}</span>
+                                                    {% elif flag.defended %}
+                                                        <span style="color: green;">defended</span>
+                                                    {% else %}
+                                                        <span style="color: orange;">down</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    {% endif %}
+                                </table>
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+                </td>{% endif %}
+                {% if show_right %}<td>
+
+        <h2>Uptime</h2>
+        <table border=1>
+            <thead>
+                <tr>
+                    <th>Round</th>
+                    {% for team in teams | sort(attribute="id") %}
+                        <th>Team {{ team.id }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for check in checks | reverse %}
+                    <tr>
+                        <td>{{ check.number }}</td>
+                        {% for team in teams | sort(attribute="id") %}
+                            {% set team_id = team.id | as_str -%}
+                            <td>
+                                <table>
+                                    {% if check.data is containing(team_id) %}
+                                        {% for name, check in check.data[team_id] %}
+                                            <tr>
+                                                <td>{{ name }}</td>
+                                                <td>
+                                                    {% if check.up %}
+                                                        <span style="color: green;">up</span>
+                                                    {% else %}
+                                                        <span style="color: red;">down</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    {% endif %}
+                                </table>
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+                </td>{% endif %}
+            </tr>
+        </table>
+    </body>
+</html>

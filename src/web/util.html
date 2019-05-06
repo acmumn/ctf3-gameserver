@@ -1,0 +1,7 @@
+{% macro timeformat(sec) %}
+    {% if sec < 0 %}
+        {% set sec = 0 -%}
+    {% endif %}
+    {% set remain = sec % 60 %}
+    {{ (sec / 60) | round(method="floor") }}:{% if remain < 10 %}0{% endif %}{{ remain }}
+{% endmacro %}

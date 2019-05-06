@@ -1,0 +1,36 @@
+db = "postgres://postgres:postgres@127.0.0.1/ctf3"
+services_dir = "../services"
+bind_addr = "127.0.0.1:3300"
+secret_key = "OSU awareness foundation"
+log_directory = "logs"
+
+# Minimum flag period in seconds
+flag_period = 20
+
+# Check period in seconds
+check_period = 120
+
+# Delay in seconds
+delay = 5
+
+# Maximum amount of time before the request is timed out
+timeout = 15
+
+ignores = ["cloudscript", "moven"]
+
+teams = [
+    { id = 0, ip = "10.0.0.10" },
+    { id = 1, ip = "10.0.0.11" },
+    { id = 2, ip = "10.0.0.12" },
+    { id = 3, ip = "10.0.0.13" },
+    { id = 4, ip = "10.0.0.14" },
+    { id = 5, ip = "10.0.0.15" },
+    { id = 6, ip = "10.0.0.16" },
+    { id = 7, ip = "10.0.0.17" },
+    { id = 8, ip = "10.0.0.18" },
+    { id = 9, ip = "10.0.0.19" },
+]
+
+[game]
+begin = 2019-03-10T00:00:00
+end = 2019-03-10T23:59:59
