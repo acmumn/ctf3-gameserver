@@ -46,18 +46,6 @@ struct UptimeEntry {
   pub data: HashMap<i32, HashMap<String, CheckUp>>,
 }
 
-#[derive(Debug, Display)]
-enum Error {
-  Db(DbError),
-
-  MissingService(String),
-  MissingTeam(i32),
-
-  Render(String),
-}
-
-impl StdError for Error {}
-
 fn scoreboard_ctx() -> impl Filter<Extract = (Context,), Error = Rejection> {
   warp::ext::get::<Config>()
     .and(warp::ext::get::<Db>())
@@ -242,6 +230,7 @@ fn scoreboard_ctx() -> impl Filter<Extract = (Context,), Error = Rejection> {
 
 pub async fn scoreboard2() {}
 
+/*
 #[deprecated]
 pub fn scoreboard() -> Resp!() {
   scoreboard_ctx()
@@ -267,61 +256,62 @@ pub fn scoreboard() -> Resp!() {
     })
     .boxed()
 }
+*/
 
 pub async fn check_up_only2() {}
 
-#[deprecated]
-pub fn check_up_only() -> Resp!() {
-  scoreboard_ctx()
-    .and_then(|mut ctx: Context| {
-      ctx.insert("show_left", &false);
-      TEMPLATE
-        .render("scoreboard.html", &ctx)
-        .map_err(|err| {
-          Error::Render(format!("{}, {:?}", err.to_string(), err.source()))
-        })
-        .map_err(reject)
-    })
-    .map(|body: String| {
-      Response::builder()
-        .header("content-type", "text/html")
-        .body(body)
-    })
-    .recover(|err| {
-      Ok(
-        Response::builder()
-          .header("content-type", "text/html")
-          .body(format!("Internal error: {:?}", err)),
-      )
-    })
-    .boxed()
-}
+// #[deprecated]
+// pub fn check_up_only() -> Resp!() {
+//   scoreboard_ctx()
+//     .and_then(|mut ctx: Context| {
+//       ctx.insert("show_left", &false);
+//       TEMPLATE
+//         .render("scoreboard.html", &ctx)
+//         .map_err(|err| {
+//           Error::Render(format!("{}, {:?}", err.to_string(), err.source()))
+//         })
+//         .map_err(reject)
+//     })
+//     .map(|body: String| {
+//       Response::builder()
+//         .header("content-type", "text/html")
+//         .body(body)
+//     })
+//     .recover(|err| {
+//       Ok(
+//         Response::builder()
+//           .header("content-type", "text/html")
+//           .body(format!("Internal error: {:?}", err)),
+//       )
+//     })
+//     .boxed()
+// }
 
 pub async fn breakdown_only2() {}
 
-#[deprecated]
-pub fn breakdown_only() -> Resp!() {
-  scoreboard_ctx()
-    .and_then(|mut ctx: Context| {
-      ctx.insert("show_right", &false);
-      TEMPLATE
-        .render("scoreboard.html", &ctx)
-        .map_err(|err| {
-          Error::Render(format!("{}, {:?}", err.to_string(), err.source()))
-        })
-        .map_err(reject)
-    })
-    .map(|body: String| {
-      Response::builder()
-        .header("content-type", "text/html")
-        .body(body)
-    })
-    .recover(|err| {
-      Ok(
-        Response::builder()
-          .header("content-type", "text/html")
-          .body(format!("Internal error: {:?}", err)),
-      )
-    })
-    .boxed()
-}
+// #[deprecated]
+// pub fn breakdown_only() -> Resp!() {
+//   scoreboard_ctx()
+//     .and_then(|mut ctx: Context| {
+//       ctx.insert("show_right", &false);
+//       TEMPLATE
+//         .render("scoreboard.html", &ctx)
+//         .map_err(|err| {
+//           Error::Render(format!("{}, {:?}", err.to_string(), err.source()))
+//         })
+//         .map_err(reject)
+//     })
+//     .map(|body: String| {
+//       Response::builder()
+//         .header("content-type", "text/html")
+//         .body(body)
+//     })
+//     .recover(|err| {
+//       Ok(
+//         Response::builder()
+//           .header("content-type", "text/html")
+//           .body(format!("Internal error: {:?}", err)),
+//       )
+//     })
+//     .boxed()
+// }

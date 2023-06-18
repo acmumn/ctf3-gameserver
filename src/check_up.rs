@@ -38,7 +38,7 @@ pub async fn main_loop(gameserver: GameServer) -> Result<()> {
 
     // Sleep for `interval` seconds
     let duration = Duration::from_secs(interval);
-    sleep(duration).await?;
+    sleep(duration).await;
   }
 }
 
@@ -81,4 +81,6 @@ async fn check_iter_helper(
       error!("Failed to bump tick: {}", err);
     })
   }));
+
+  Ok(())
 }

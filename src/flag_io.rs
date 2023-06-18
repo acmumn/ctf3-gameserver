@@ -10,6 +10,7 @@ use tokio::time::sleep;
 use crate::core::calculate_round_length;
 use crate::{dal, game, GameServer};
 
+// The main loop for inserting and retrieving flags
 pub async fn main_loop(gameserver: GameServer) -> Result<()> {
   let (interval, log_directory) = {
     let gs = gameserver.lock().unwrap();

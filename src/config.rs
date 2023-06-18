@@ -1,7 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-
-use chrono::Duration;
+use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TeamConfig {
@@ -20,7 +19,7 @@ pub struct Config {
     serialize_with = "crate::utils::to_duration_sec",
     deserialize_with = "crate::utils::from_duration_sec"
   )]
-  pub timeout_sec: u64,
+  pub timeout: Duration,
 
   pub teams: Vec<TeamConfig>,
 
@@ -33,6 +32,6 @@ pub struct Config {
   pub secret_key: String,
 }
 
-fn default_timeout_sec() -> u64 {
-  15
+fn default_timeout_sec() -> Duration {
+  Duration::from_secs(15)
 }

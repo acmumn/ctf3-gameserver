@@ -1,13 +1,16 @@
 use std::{
+  ffi::OsStr,
   fmt,
   path::Path,
   process::{Output, Stdio},
   time::Duration,
 };
 
+use anyhow::{Context, Result};
 use serde::{de, Serializer};
 use tokio::{process::Command, time};
 
+/// Run a child process with a timeout and the specified common args
 pub async fn child_output_helper<Args, Arg>(
   executable: impl AsRef<Path>,
   working_directory: impl AsRef<Path>,
@@ -17,6 +20,7 @@ pub async fn child_output_helper<Args, Arg>(
 ) -> Result<Output>
 where
   Args: IntoIterator<Item = Arg>,
+  Arg: AsRef<OsStr>,
 {
   let child_future = Command::new(executable.as_ref())
     .args(args)

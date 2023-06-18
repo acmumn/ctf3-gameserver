@@ -20,6 +20,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use crate::dal;
+use crate::dal::Db;
 use crate::key::generate_flag;
 use crate::models::{self, Flag, NewFlag};
 use crate::service::ServiceApi;
@@ -27,12 +28,12 @@ use crate::{Config, TeamConfig};
 
 #[derive(Clone)]
 pub struct GameServer {
-  db: SqlitePool,
+  db: Db,
   shared: Arc<RwLock<Shared>>,
 }
 
 impl GameServer {
-  pub async fn new(config: Config, db: SqlitePool) -> Result<Self> {
+  pub async fn new(config: Config, db: Db) -> Result<Self> {
     // create the log directory if it doesn't exist
     if !config.log_directory.exists() {
       fs::create_dir_all(&config.log_directory)
@@ -131,17 +132,7 @@ impl GameServer {
       })
       .collect();
 
-    // use a pre-seeded RNG. not really "secure", but works for a game
-    let rng = {
-      let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-      StdRng::seed_from_u64(now)
-    };
-
-    let shared = Shared {
-      config,
-      services,
-      rng,
-    };
+    let shared = Shared { config, services };
 
     let gameserver = GameServer {
       db,
@@ -152,7 +143,7 @@ impl GameServer {
   }
 
   /// Get a handle to the game server's database
-  pub fn database(&self) -> SqlitePool {
+  pub fn database(&self) -> Db {
     self.db.clone()
   }
 
@@ -182,7 +173,7 @@ impl GameServer {
       let get_log_dir = get_log_dir.join(&service_name);
 
       // choose a random delay and sleep
-      let delay = self.rng.next_u64() % delay;
+      let delay = rng.next_u64() % delay;
       let delay_duration = Duration::from_secs(delay);
       sleep(delay_duration).await;
 
@@ -291,7 +282,6 @@ impl GameServer {
 struct Shared {
   config: Config,
   services: Vec<Arc<Mutex<ServiceApi>>>,
-  rng: StdRng,
 }
 
 impl Shared {
@@ -323,7 +313,8 @@ impl Shared {
       let log_dir = log_dir.clone();
 
       // choose a random delay and sleep
-      let delay = self.rng.next_u64() % delay;
+      let mut rng = rand::thread_rng();
+      let delay = rng.next_u64() % delay;
       let delay_duration = Duration::from_secs(delay);
       sleep(delay_duration).await;
 

@@ -108,8 +108,8 @@ impl ServiceApi {
       executable,
       &self.base_dir,
       log_dir.as_ref(),
-      vec![],
-      &self.timeout,
+      args,
+      self.timeout,
     )
     .await?;
 
@@ -136,7 +136,7 @@ impl ServiceApi {
       &self.base_dir,
       log_dir.as_ref(),
       args,
-      &self.timeout,
+      self.timeout,
     )
     .await?;
 
@@ -158,13 +158,12 @@ impl ServiceApi {
     let port = self.config.port;
 
     let args = vec![target.to_string(), port.to_string(), flag];
-    let timeout = Duration::from_secs(self.timeout as u64);
     let child_output = child_output_helper(
       executable.clone(),
       &self.base_dir,
       log_dir.as_ref(),
       args.clone(),
-      timeout,
+      self.timeout,
     )
     .await
     .context("could not call set flag child")?;

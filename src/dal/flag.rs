@@ -3,9 +3,9 @@ use sqlx::{Connection, Executor};
 
 use crate::models::Flag;
 
-use super::team::TeamId;
+use super::{team::TeamId, Db};
 
-pub async fn get_last_flag(db: impl Connection) -> Result<Flag> {
+pub async fn get_last_flag(db: &Db) -> Result<Flag> {
   sqlx::query(
     "
     ",
@@ -13,6 +13,8 @@ pub async fn get_last_flag(db: impl Connection) -> Result<Flag> {
   .execute(db)
   .await
   .context("could not execute query")?;
+
+  todo!()
 }
 
 pub async fn find_by_flag(db: impl Connection, as_ref: &str) -> Result<Flag> {

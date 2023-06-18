@@ -1,7 +1,9 @@
 use anyhow::Result;
 use sqlx::{Connection, Executor};
 
-pub async fn current_tick(e: impl Executor<'_>) -> Result<i32> {
+use super::Db;
+
+pub async fn current_tick(db: &Db) -> Result<i32> {
   todo!()
 }
 

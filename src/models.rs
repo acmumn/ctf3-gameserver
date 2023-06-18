@@ -2,6 +2,8 @@ use std::net::Ipv4Addr;
 
 use chrono::{DateTime, Utc};
 
+use crate::dal::team::TeamId;
+
 // use crate::schema::{check_ups, flags, services, teams};
 
 pub struct Tick {
@@ -12,7 +14,7 @@ pub struct Tick {
 }
 
 pub struct Team {
-  pub id: i32,
+  pub id: TeamId,
   pub arbitrary_bonus_points: i32,
   pub ip: Ipv4Addr,
 }

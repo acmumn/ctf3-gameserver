@@ -8,12 +8,14 @@ use axum::{
   routing::{get, post},
   Router, Server,
 };
+use sqlx::SqlitePool;
 use warp::Filter;
 
 use crate::config::Config;
 
-pub async fn run2(config: &Config) -> Result<()> {
+pub async fn run2(config: &Config, db: SqlitePool) -> Result<()> {
   let app = Router::new()
+    .with_state(db)
     .route("/submit", post(submit_flag::submit_flag2))
     .route("/breakdown", post(scoreboard::breakdown_only2))
     .route("/check_up", post(scoreboard::check_up_only2))

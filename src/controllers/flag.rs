@@ -1,11 +1,9 @@
+use anyhow::Result;
 use sqlx::{Connection, Executor};
 
 use crate::dal;
 
-pub async fn submit(
-  db: impl Connection<'_>,
-  flag: impl AsRef<str>,
-) -> Result<()> {
+pub async fn submit(db: impl Connection, flag: impl AsRef<str>) -> Result<()> {
   db.transaction(|| async {
     // Look up the flag
     let flag = dal::flag::find_by_flag(db, flag.as_ref()).await?;
@@ -15,7 +13,7 @@ pub async fn submit(
       bail!("flag already claimed")
     }
 
-    //
+    // Wait can i do this all in the DAL lmao
     todo!()
   });
 }

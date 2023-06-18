@@ -15,6 +15,7 @@ pub async fn submit_flag2(Json(payload): Json<Form>) {
   // security to prevent abuse, etc.
 }
 
+/*
 #[deprecated]
 pub fn submit_flag() -> Resp!() {
   warp::ext::get::<Db>()
@@ -41,3 +42,4 @@ pub fn submit_flag() -> Resp!() {
     })
     .boxed()
 }
+*/

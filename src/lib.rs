@@ -5,7 +5,7 @@ extern crate anyhow;
 #[macro_use]
 extern crate derive_more;
 #[macro_use]
-extern crate log;
+extern crate tracing;
 #[macro_use]
 extern crate serde;
 
@@ -15,6 +15,7 @@ pub mod setup_logging;
 
 mod config;
 pub mod controllers;
+pub mod core;
 pub mod dal;
 mod game;
 mod key;
