@@ -1,3 +1,4 @@
+use axum::Json;
 use warp::Filter;
 
 use crate::Db;
@@ -8,6 +9,9 @@ struct Form {
     flag: String,
 }
 
+pub async fn submit_flag2(Json(payload): Json<Form>) {}
+
+#[deprecated]
 pub fn submit_flag() -> Resp!() {
     warp::ext::get::<Db>()
         .and(warp::body::form())

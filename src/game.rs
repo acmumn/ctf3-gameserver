@@ -4,51 +4,44 @@ use std::io;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
+use anyhow::Result;
 use chrono::{DateTime, Utc};
+use futures::future;
+use rand::rngs::StdRng;
 use rand::RngCore;
-use tokio::{prelude::*, timer::Delay};
+use rand::SeedableRng;
+use sqlx::SqlitePool;
+use tokio::time::sleep;
 
-use crate::db::{Db, DbError};
+use crate::dal;
 use crate::key::generate_flag;
 use crate::models::{self, Flag, NewFlag};
 use crate::service::{Service, ServiceError};
 use crate::{Config, TeamConfig};
 
 pub struct GameServer {
-    db: Db,
+    db: SqlitePool,
     config: Config,
     services: Vec<Arc<Mutex<Service>>>,
-}
-
-#[derive(Debug)]
-pub enum GameServerError {
-    Db(DbError),
-    ListServices(io::Error),
-    ReadEntry(io::Error),
-    Delay(tokio::timer::Error),
-    Service(ServiceError),
-    GetFlag(ServiceError),
-    CheckUp(ServiceError),
-    SetFlag(ServiceError),
-    OsString(OsString),
+    rng: StdRng,
 }
 
 impl GameServer {
-    pub fn new(config: Config) -> Result<Self, GameServerError> {
+    pub async fn new(config: Config, db: SqlitePool) -> Result<Self> {
         // create the log directory if it doesn't exist
         if !config.log_directory.exists() {
-            fs::create_dir_all(&config.log_directory).expect("failed to create log directory");
+            fs::create_dir_all(&config.log_directory).context("failed to create log directory")?;
         }
 
-        // connect to db
-        let db = Db::connect(&config.db).map_err(GameServerError::Db)?;
-
         // clear in-progress flags
-        let (current_tick, _) = db.get_current_tick().expect("failed to get current tick");
-        db.clear_in_progress(current_tick)
-            .map_err(GameServerError::Db)?;
+        // let (current_tick, _) = db.get_current_tick().expect("failed to get current tick");
+        let current_tick = dal::tick::current_tick(&db).await.context("could not get current tick")?;
+        dal::tick::clear_in_progress(&db, current_tick).await.context("could not clear in-progress flags")?;
 
         // load teams into db
         for team in &config.teams {
@@ -125,11 +118,20 @@ impl GameServer {
                 }
             })
             .collect();
+
+        // Not really "secure", but works for a game
+        let rng = {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+            StdRng::seed_from_u64(now)
+        };
+
         let gameserver = GameServer {
             db,
             config,
             services,
+            rng,
         };
+
         Ok(gameserver)
     }
 
@@ -145,32 +147,32 @@ impl GameServer {
         self.db.clone()
     }
 
-    pub fn check_up(
+    pub async fn check_up(
         &self,
-        db: Db,
         check_number: i32,
         now: DateTime<Utc>,
         team_id: i32,
         target: Ipv4Addr,
         log_dir: impl AsRef<Path>,
-    ) -> impl Future<Item = (), Error = ()> + Send + Sync {
-        let mut rng = rand::thread_rng();
+    ) -> Result<()> {
         let services = self.services.clone();
         let delay = self.config.delay;
         let log_dir = log_dir.as_ref().to_path_buf();
 
-        future::join_all(services.into_iter().map(move |service_mux| {
+        future::join_all(services.into_iter().map(move |service_mux| async {
             let service_mux2 = service_mux.clone();
             let service = service_mux.lock().unwrap();
             let name = service.name.clone();
             let log_dir = log_dir.clone();
 
-            // choose a random delay
-            let delay = rng.next_u32() % delay;
-            let delay_timer = Delay::new(Instant::now() + Duration::from_secs(delay.into()));
-            let fut: Box<Future<Item = (), Error = GameServerError> + Send + Sync> =
-                Box::new(delay_timer.map(|_| ()).map_err(GameServerError::Delay));
-            let db = db.clone();
+            // choose a random delay and sleep
+            let delay = self.rng.next_u64() % delay;
+            let delay_duration = Duration::from_secs(delay);
+            sleep(delay_duration).await;
+            // let delay_timer = Delay::new(Instant::now() + Duration::from_secs(delay.into()));
+            // let fut: Box<Future<Item = (), Error = GameServerError> + Send + Sync> =
+            // Box::new(delay_timer.map(|_| ()).map_err(GameServerError::Delay));
+            // let db = db.clone();
 
             let svc_name = name.clone();
             let insert_checkup = move |result: Result<_, _>| {
@@ -179,22 +181,22 @@ impl GameServer {
             };
             let svc_name = name.clone();
 
-            fut.and_then(move |_| {
                 let service = service_mux2.lock().unwrap();
                 info!("check_up service={} team_id={}", name, team_id);
                 service
                     .check_up(target, log_dir)
                     .map_err(GameServerError::CheckUp)
-            })
-            .then(insert_checkup)
+            insert_checkup();
         }))
         .map(|_| ())
         .map_err(|err| {
             error!("gameserver check_up error: {:?}", err);
-        })
+        });
+
+        Ok(())
     }
 
-    pub fn each_team(
+    pub async fn each_team(
         &self,
         db: Db,
         tick: i32,
@@ -203,7 +205,7 @@ impl GameServer {
         has_prev: bool,
         get_log_dir: impl AsRef<Path>,
         set_log_dir: impl AsRef<Path>,
-    ) -> impl Future<Item = (), Error = ()> + Send + Sync {
+    ) -> Result<()> {
         let services = self.services.clone();
         let delay = self.config.delay;
         let get_log_dir = get_log_dir.as_ref().to_path_buf();

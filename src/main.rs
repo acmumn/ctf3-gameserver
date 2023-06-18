@@ -4,8 +4,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use gameserver::{check_up, flag_io};
+use anyhow::{Context, Result};
+use gameserver::{check_up, flag_io, setup_logging};
 use gameserver::{Config, Db, GameServer};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::SqlitePool;
 use structopt::StructOpt;
 use tokio::prelude::*;
 
@@ -22,26 +25,27 @@ struct Opt {
 enum Command {
     #[structopt(name = "run")]
     Run,
-
-    #[structopt(name = "migrate")]
-    Migrate,
 }
 
-fn main() {
-    env_logger::builder().default_format_timestamp(false).init();
-    let opt = Opt::from_args();
+#[tokio::main]
+async fn main() -> Result<()> {
+    let opts = Opt::from_args();
+
+    setup_logging::setup_logging();
 
     // read the config file
-    let mut file = File::open(opt.config).expect("config file couldn't be opened");
+    let mut file = File::open(opts.config).context("config file couldn't be opened")?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)
-        .expect("failed to read config");
-    let config: Config = toml::from_slice(contents.as_slice()).expect("couldn't parse config");
+        .context("failed to read config")?;
+    let config: Config = toml::from_slice(contents.as_slice()).context("couldn't parse config")?;
 
     // connect to the db
-    let db = Db::connect(&config.db).expect("couldn't connect to the db");
+    let db_options = SqliteConnectOptions::new().filename(&config.db);
+    let db = SqlitePool::connect_with(db_options).await?;
+    // let db = Db::connect(&config.db).expect("couldn't connect to the db");
 
-    match &opt.cmd {
+    match opts.cmd {
         Command::Run => {
             let bind_addr = config.bind_addr;
 
@@ -56,8 +60,7 @@ fn main() {
             });
             tokio::run(check_up.join(flag_io).map(|_| ()));
         }
-        Command::Migrate => {
-            db.migrate().expect("failed to migrate");
-        }
     }
+
+    Ok(())
 }

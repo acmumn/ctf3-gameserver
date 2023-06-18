@@ -11,11 +11,11 @@ pub struct TeamConfig {
 pub struct Config {
     pub flag_period: u32,
     pub check_period: u32,
-    pub delay: u32,
+    pub delay: u64,
     pub timeout: u32,
     pub teams: Vec<TeamConfig>,
 
-    pub db: String,
+    pub db: PathBuf,
     pub services_dir: PathBuf,
     pub ignores: Vec<String>,
 

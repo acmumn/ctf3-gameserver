@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use tokio::{prelude::*, timer::Delay};
+use tokio::timer::Delay;
 
 use crate::GameServer;
 

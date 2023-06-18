@@ -2,13 +2,13 @@
 name = "gameserver"
 version = "0.1.0"
 authors = ["Michael Zhang <iptq@protonmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
+anyhow = "1.0.71"
+axum = "0.6.18"
 chrono = { version = "0.4", features = ["serde"] }
 derive_more = "0.99"
-diesel = { version = "2.1", features = ["postgres", "extras"] }
-diesel_migrations = "2.1"
 env_logger = "0.10"
 futures = "0.3.28"
 hmac = "0.12"
@@ -19,10 +19,10 @@ rand = "0.8"
 serde = "1.0"
 serde_derive = "1.0"
 sha2 = "0.10"
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "sqlite"] }
 structopt = "0.3"
 tera = "1.19.0"
-tokio = { version = "1", features = ["full"] }
-tokio-process = "0.2"
+tokio = { version = "1.28.2", features = ["full"] }
 tokio-threadpool = "0.1"
 tokio-timer = "0.2.13"
 toml = "0.7"

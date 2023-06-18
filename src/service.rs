@@ -2,18 +2,21 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::prelude::*;
+use tokio::process::Command;
+use tokio::time::timeout;
 
 use crate::config::Config;
-use crate::util::{TimeoutCommand, TimeoutCommandError};
 
+/// A service runs on the competitors' machine and sends periodic updates to the
+/// gameserver.
 pub struct Service {
     pub name: String,
     pub config: ServiceConfig,
 
-    pub timeout: u32,
+    pub timeout: Duration,
     pub base_dir: PathBuf,
 
     pub get_flag_path: PathBuf,
@@ -82,12 +85,11 @@ impl Service {
         }
 
         let mut config_file = File::open(&config_path).map_err(ServiceError::OpenConfigFile)?;
-        let mut contents = Vec::new();
+        let mut contents = String::new();
         config_file
-            .read_to_end(&mut contents)
+            .read_to_string(&mut contents)
             .map_err(ServiceError::ReadConfigFile)?;
-        let config: ServiceConfig =
-            toml::from_slice(&contents).map_err(ServiceError::ParseConfig)?;
+        let config: ServiceConfig = toml::from_str(&contents).map_err(ServiceError::ParseConfig)?;
 
         optional_path!(let get_flag_path = (&config.get_flag_path, path.join("get_flag")));
         optional_path!(let set_flag_path = (&config.set_flag_path, path.join("set_flag")));
@@ -105,12 +107,12 @@ impl Service {
         Ok(service)
     }
 
-    pub fn get_flag(
+    pub async fn get_flag(
         &self,
         target: Ipv4Addr,
         flag_id: Option<String>,
         log_dir: impl AsRef<Path>,
-    ) -> impl Future<Item = String, Error = ServiceError> {
+    ) -> Result<String, Error = ServiceError> {
         let executable = self.get_flag_path.to_owned();
         let port = self.config.port;
 
@@ -119,14 +121,15 @@ impl Service {
             args.push(flag_id);
         }
 
-        let child = TimeoutCommand::new(
-            executable,
-            &self.base_dir,
-            log_dir.as_ref(),
-            args,
-            Duration::from_secs(self.timeout as u64),
-        )
-        .map_err(ServiceError::Spawn);
+        let child_future = Command::new(executable)
+            .current_dir(&self.base_dir)
+            .stdin(Stdio::null())
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .spawn_async();
+        let child = timeout(self.timeout, child_future).spawn()?;
+
+        let output = child.wait_with_output().await?;
 
         future::result(child)
             .and_then(|child| child.map_err(ServiceError::Subprocess))
@@ -137,11 +140,12 @@ impl Service {
             })
     }
 
-    pub fn check_up(
+    /// Check if the service is still up (heartbeat)
+    pub async fn check_up(
         &self,
         target: Ipv4Addr,
         log_dir: impl AsRef<Path>,
-    ) -> impl Future<Item = (), Error = ServiceError> {
+    ) -> Result<(), ServiceError> {
         let name = self.name.clone();
         let executable = self.check_up_path.to_owned();
         let port = self.config.port;

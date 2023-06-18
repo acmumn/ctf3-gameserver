@@ -3,6 +3,7 @@ use std::error::Error as StdError;
 
 use chrono::{Duration, NaiveDateTime, Utc};
 use lazy_static::lazy_static;
+use serde::__private::de;
 use tera::{Context, Tera};
 use warp::{http::Response, reject::custom as reject, Filter, Rejection};
 
@@ -235,11 +236,14 @@ fn scoreboard_ctx() -> impl Filter<Extract = (Context,), Error = Rejection> {
         .boxed()
 }
 
+pub async fn scoreboard2() {}
+
+#[deprecated]
 pub fn scoreboard() -> Resp!() {
     scoreboard_ctx()
         .and_then(|ctx| {
             TEMPLATE
-                .render("scoreboard.html", ctx)
+                .render("scoreboard.html", &ctx)
                 .map_err(|err| Error::Render(format!("{}, {:?}", err.to_string(), err.source())))
                 .map_err(reject)
         })
@@ -256,12 +260,15 @@ pub fn scoreboard() -> Resp!() {
         .boxed()
 }
 
+pub async fn check_up_only2() {}
+
+#[deprecated]
 pub fn check_up_only() -> Resp!() {
     scoreboard_ctx()
         .and_then(|mut ctx: Context| {
             ctx.insert("show_left", &false);
             TEMPLATE
-                .render("scoreboard.html", ctx)
+                .render("scoreboard.html", &ctx)
                 .map_err(|err| Error::Render(format!("{}, {:?}", err.to_string(), err.source())))
                 .map_err(reject)
         })
@@ -278,12 +285,15 @@ pub fn check_up_only() -> Resp!() {
         .boxed()
 }
 
+pub async fn breakdown_only2() {}
+
+#[deprecated]
 pub fn breakdown_only() -> Resp!() {
     scoreboard_ctx()
         .and_then(|mut ctx: Context| {
             ctx.insert("show_right", &false);
             TEMPLATE
-                .render("scoreboard.html", ctx)
+                .render("scoreboard.html", &ctx)
                 .map_err(|err| Error::Render(format!("{}, {:?}", err.to_string(), err.source())))
                 .map_err(reject)
         })
