@@ -27,6 +27,7 @@ use crate::{Config, TeamConfig};
 
 #[derive(Clone)]
 pub struct GameServer {
+  db: SqlitePool,
   shared: Arc<RwLock<Shared>>,
 }
 
@@ -39,7 +40,6 @@ impl GameServer {
     }
 
     // clear in-progress flags
-    // let (current_tick, _) = db.get_current_tick().expect("failed to get current tick");
     let current_tick = dal::tick::current_tick(&db)
       .await
       .context("could not get current tick")?;
@@ -138,89 +138,22 @@ impl GameServer {
     };
 
     let shared = Shared {
-      db,
       config,
       services,
       rng,
     };
 
     let gameserver = GameServer {
+      db,
       shared: Arc::new(RwLock::new(shared)),
     };
 
     Ok(gameserver)
   }
-}
 
-struct Shared {
-  db: SqlitePool,
-  config: Config,
-  services: Vec<Arc<Mutex<ServiceApi>>>,
-  rng: StdRng,
-}
-
-impl Shared {
-  pub fn get_config(&self) -> &Config {
-    &self.config
-  }
-
-  pub fn get_teams(&self) -> Vec<TeamConfig> {
-    self.config.teams.clone()
-  }
-
-  pub fn get_db(&self) -> SqlitePool {
+  /// Get a handle to the game server's database
+  pub fn database(&self) -> SqlitePool {
     self.db.clone()
-  }
-
-  /// Run the check-up operation on each of the competitors' servers
-  pub async fn check_up(
-    &self,
-    check_number: i32,
-    now: DateTime<Utc>,
-    team_id: i32,
-    target: Ipv4Addr,
-    log_dir: impl AsRef<Path>,
-  ) -> Result<()> {
-    let services = self.services.clone();
-    let delay = self.config.delay;
-    let log_dir = log_dir.as_ref().to_path_buf();
-
-    future::join_all(services.into_iter().map(move |service_mux| async {
-      let service_mux2 = service_mux.clone();
-      let service = service_mux.lock().unwrap();
-      let name = service.name.clone();
-      let log_dir = log_dir.clone();
-
-      // choose a random delay and sleep
-      let delay = self.rng.next_u64() % delay;
-      let delay_duration = Duration::from_secs(delay);
-      sleep(delay_duration).await;
-
-      let svc_name = name.clone();
-
-      let service = service_mux2.lock().unwrap();
-      info!("check_up service={} team_id={}", name, team_id);
-
-      service.check_up(target, log_dir).await.with_context(|| {
-        format!("could not check up on service {svc_name} in team {team_id}")
-      })?;
-
-      dal::checkup::insert(
-        &self.db,
-        check_number,
-        now,
-        team_id,
-        svc_name,
-        result.is_ok(),
-      )
-      .await?;
-    }))
-    .map(|_| ())
-    .map_err(|err| {
-      error!("gameserver check_up error: {:?}", err);
-    });
-
-    Ok(())
   }
 
   pub async fn each_team(
@@ -239,11 +172,12 @@ impl Shared {
 
     future::join_all(services.into_iter().map(move |service_mux| async {
       let mut rng = rand::thread_rng();
-      let db = db.clone();
+      let db = self.db.clone();
       let service_name = {
         let service = service_mux.lock().unwrap();
         service.name.clone()
       };
+
       let set_log_dir = set_log_dir.join(&service_name);
       let get_log_dir = get_log_dir.join(&service_name);
 
@@ -351,5 +285,72 @@ impl Shared {
         .map(|_| ())
     }))
     .map(|_| ())
+  }
+}
+
+struct Shared {
+  config: Config,
+  services: Vec<Arc<Mutex<ServiceApi>>>,
+  rng: StdRng,
+}
+
+impl Shared {
+  pub fn get_config(&self) -> &Config {
+    &self.config
+  }
+
+  pub fn get_teams(&self) -> Vec<TeamConfig> {
+    self.config.teams.clone()
+  }
+
+  /// Run the check-up operation on each of the competitors' servers
+  pub async fn check_up(
+    &self,
+    check_number: i32,
+    now: DateTime<Utc>,
+    team_id: i32,
+    target: Ipv4Addr,
+    log_dir: impl AsRef<Path>,
+  ) -> Result<()> {
+    let services = self.services.clone();
+    let delay = self.config.delay;
+    let log_dir = log_dir.as_ref().to_path_buf();
+
+    future::join_all(services.into_iter().map(move |service_mux| async {
+      let service_mux2 = service_mux.clone();
+      let service = service_mux.lock().unwrap();
+      let name = service.name.clone();
+      let log_dir = log_dir.clone();
+
+      // choose a random delay and sleep
+      let delay = self.rng.next_u64() % delay;
+      let delay_duration = Duration::from_secs(delay);
+      sleep(delay_duration).await;
+
+      let svc_name = name.clone();
+
+      let service = service_mux2.lock().unwrap();
+      info!("check_up service={} team_id={}", name, team_id);
+
+      service.check_up(target, log_dir).await.with_context(|| {
+        format!("could not check up on service {svc_name} in team {team_id}")
+      })?;
+
+      dal::checkup::insert(
+        &self.db,
+        check_number,
+        now,
+        team_id,
+        svc_name,
+        result.is_ok(),
+      )
+      .await?;
+    }))
+    .map(|_| ())
+    .map_err(|err| {
+      error!("gameserver check_up error: {:?}", err);
+    });
+
+    Ok(())
   }
 }

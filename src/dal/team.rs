@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use anyhow::{Context, Result};
-use sqlx::Executor;
+use sqlx::{Connection, Executor};
 
 use crate::models::Team;
 
@@ -29,4 +29,8 @@ pub async fn create(
     arbitrary_bonus_points: 0,
     ip: team_ip,
   }
+}
+
+pub async fn get_all(db: impl Connection<'_>) -> Result<Vec<Team>> {
+  todo!()
 }

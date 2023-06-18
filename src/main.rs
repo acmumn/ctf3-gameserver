@@ -6,7 +6,7 @@ use std::thread;
 
 use anyhow::{Context, Result};
 use futures::future;
-use gameserver::{check_up, flag_io, setup_logging};
+use gameserver::{check_up, flag_io, setup_logging, web};
 use gameserver::{Config, Db, GameServer};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
@@ -57,15 +57,13 @@ async fn main() -> Result<()> {
         .await
         .context("couldn't load gameserver")?;
 
-      let flag_io = flag_io::ticker(gameserver.clone());
-
       let handles = vec![
-        tokio::spawn(check_up::ticker_loop(gameserver.clone())),
-        tokio::spawn(flag_io),
+        tokio::spawn(check_up::main_loop(gameserver.clone())),
+        tokio::spawn(flag_io::main_loop(gameserver.clone())),
       ];
 
       thread::spawn(move || {
-        gameserver::web::run(config, bind_addr, db);
+        web::run(config, bind_addr, db);
       });
 
       future::join_all(handles).await;
