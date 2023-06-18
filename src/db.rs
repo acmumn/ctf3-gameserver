@@ -105,34 +105,6 @@ impl Db {
         })
     }
 
-    pub fn add_team(&self, team_id: i32, team_ip: Ipv4Addr) -> Result<(), DbError> {
-        use crate::schema::teams::dsl::{id, teams};
-        let conn = self.get_conn()?;
-        self.transaction(|| {
-            let team = match teams.filter(id.eq(team_id)).first::<Team>(&conn.0) {
-                Ok(v) => Some(v),
-                Err(NotFound) => None,
-                Err(err) => return Err(DbError::InsertTeam(err)),
-            };
-
-            if team.is_none() {
-                // insert team
-                let new_team = NewTeam {
-                    id: team_id,
-                    ip: u32::from(team_ip) as i32,
-                };
-
-                use crate::schema::teams;
-                diesel::insert_into(teams::table)
-                    .values(&new_team)
-                    .execute(&conn.0)
-                    .map_err(DbError::InsertTeam)?;
-            }
-
-            Ok(())
-        })
-    }
-
     pub fn add_service(&self, new_service: &Service) -> Result<(), DbError> {
         use crate::schema::services::dsl::{name, services};
         let conn = self.get_conn()?;

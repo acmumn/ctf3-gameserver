@@ -21,7 +21,7 @@ use tokio::time::sleep;
 use crate::dal;
 use crate::key::generate_flag;
 use crate::models::{self, Flag, NewFlag};
-use crate::service::{Service, ServiceError};
+use crate::service::{Service};
 use crate::{Config, TeamConfig};
 
 pub struct GameServer {
@@ -45,12 +45,14 @@ impl GameServer {
 
         // load teams into db
         for team in &config.teams {
-            db.add_team(team.id, team.ip).map_err(GameServerError::Db)?;
+            dal::team::create(&db, team.id, team.ip).await?;
+            // db.add_team(team.id, team.ip).map_err(GameServerError::Db)?;
         }
 
         // list the directory
         let read_dir = fs::read_dir(&config.services_dir).map_err(GameServerError::ListServices)?;
         let mut services = Vec::new();
+
         for entry in read_dir {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -71,7 +73,7 @@ impl GameServer {
             // ignore non-directories
             if !entry
                 .file_type()
-                .map_err(GameServerError::ReadEntry)?
+                .with_context(|| format!("could not stat service directory {}", entry.path().display()))
                 .is_dir()
             {
                 continue;
@@ -119,7 +121,7 @@ impl GameServer {
             })
             .collect();
 
-        // Not really "secure", but works for a game
+        // use a pre-seeded RNG. not really "secure", but works for a game
         let rng = {
             let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
             StdRng::seed_from_u64(now)
@@ -143,7 +145,7 @@ impl GameServer {
         self.config.teams.clone()
     }
 
-    pub fn get_db(&self) -> Db {
+    pub fn get_db(&self) -> SqlitePool {
         self.db.clone()
     }
 

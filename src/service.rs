@@ -2,11 +2,12 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Output, Stdio};
 use std::time::Duration;
 
+use anyhow::{Context, Result};
 use tokio::process::Command;
-use tokio::time::timeout;
+use tokio::time;
 
 use crate::config::Config;
 
@@ -37,26 +38,6 @@ pub struct ServiceConfig {
     pub check_up_path: Option<PathBuf>,
 }
 
-#[derive(Debug)]
-pub enum ServiceError {
-    ConfigFileMissing,
-    OpenConfigFile(io::Error),
-    ReadConfigFile(io::Error),
-    ParseConfig(toml::de::Error),
-    FileNotFound(PathBuf),
-    DecodeOutput(std::string::FromUtf8Error),
-    Spawn(io::Error),
-    Subprocess(TimeoutCommandError),
-
-    GetFlagIO(io::Error),
-    SetFlagIO(io::Error),
-    CheckUpIO(io::Error),
-
-    GetFlagError,
-    SetFlagError,
-    CheckUpError,
-}
-
 macro_rules! optional_path {
     (let $var_name:ident = ($opt_1:expr , $opt_2:expr)) => {
         let $var_name = match $opt_1 {
@@ -65,31 +46,32 @@ macro_rules! optional_path {
         };
 
         if !$var_name.exists() {
-            return Err(ServiceError::FileNotFound($var_name));
+            bail!("could not locate file: {}", $var_name.display());
         }
     };
 }
 
 impl Service {
     pub fn load_from_dir(
-        gs_config: &Config,
+        config: &Config,
         name: impl AsRef<str>,
         path: impl AsRef<Path>,
-    ) -> Result<Self, ServiceError> {
+    ) -> Result<Self> {
         let name = name.as_ref();
         let path = path.as_ref();
 
         let config_path = path.join("meta.toml");
         if !config_path.exists() {
-            return Err(ServiceError::ConfigFileMissing);
+            bail!("configuration file is missing");
         }
 
-        let mut config_file = File::open(&config_path).map_err(ServiceError::OpenConfigFile)?;
+        let mut config_file = File::open(&config_path).context("could not open config file")?;
         let mut contents = String::new();
         config_file
             .read_to_string(&mut contents)
-            .map_err(ServiceError::ReadConfigFile)?;
-        let config: ServiceConfig = toml::from_str(&contents).map_err(ServiceError::ParseConfig)?;
+            .context("could not read config file")?;
+        let config: ServiceConfig =
+            toml::from_str(&contents).context("could not parse config file")?;
 
         optional_path!(let get_flag_path = (&config.get_flag_path, path.join("get_flag")));
         optional_path!(let set_flag_path = (&config.set_flag_path, path.join("set_flag")));
@@ -98,7 +80,7 @@ impl Service {
         let service = Service {
             name: name.to_owned(),
             config,
-            timeout: gs_config.timeout,
+            timeout: config.timeout,
             base_dir: path.to_path_buf(),
             get_flag_path,
             set_flag_path,
@@ -112,7 +94,7 @@ impl Service {
         target: Ipv4Addr,
         flag_id: Option<String>,
         log_dir: impl AsRef<Path>,
-    ) -> Result<String, Error = ServiceError> {
+    ) -> Result<String> {
         let executable = self.get_flag_path.to_owned();
         let port = self.config.port;
 
@@ -121,31 +103,16 @@ impl Service {
             args.push(flag_id);
         }
 
-        let child_future = Command::new(executable)
-            .current_dir(&self.base_dir)
-            .stdin(Stdio::null())
-            .stderr(Stdio::inherit())
-            .stdout(Stdio::piped())
-            .spawn_async();
-        let child = timeout(self.timeout, child_future).spawn()?;
+        let child_output = child_output_helper(executable, &self.base_dir, &self.timeout).await?;
 
-        let output = child.wait_with_output().await?;
+        let string = String::from_utf8(child_output.stdout)?;
+        let string = string.trim().to_owned();
 
-        future::result(child)
-            .and_then(|child| child.map_err(ServiceError::Subprocess))
-            .and_then(|output| {
-                String::from_utf8(output)
-                    .map(|output| output.trim().to_owned())
-                    .map_err(ServiceError::DecodeOutput)
-            })
+        Ok(string)
     }
 
     /// Check if the service is still up (heartbeat)
-    pub async fn check_up(
-        &self,
-        target: Ipv4Addr,
-        log_dir: impl AsRef<Path>,
-    ) -> Result<(), ServiceError> {
+    pub async fn check_up(&self, target: Ipv4Addr, log_dir: impl AsRef<Path>) -> Result<()> {
         let name = self.name.clone();
         let executable = self.check_up_path.to_owned();
         let port = self.config.port;
@@ -200,4 +167,25 @@ impl Service {
                     .map_err(ServiceError::DecodeOutput)
             })
     }
+}
+
+async fn child_output_helper(
+    executable: impl AsRef<Path>,
+    working_directory: impl AsRef<Path>,
+    log_directory: impl AsRef<Path>,
+    timeout: Duration,
+) -> Result<Output> {
+    let child_future = Command::new(executable.as_ref())
+        .current_dir(working_directory.as_ref())
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("could not spawn child")?;
+
+    let child_output = time::timeout(timeout, child_future.wait_with_output())
+        .await
+        .context("child execution failed")??;
+
+    Ok(child_output)
 }
