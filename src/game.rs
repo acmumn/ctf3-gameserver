@@ -16,19 +16,18 @@ use rand::rngs::StdRng;
 use rand::RngCore;
 use rand::SeedableRng;
 use sqlx::SqlitePool;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use crate::dal;
 use crate::key::generate_flag;
 use crate::models::{self, Flag, NewFlag};
-use crate::service::Service;
+use crate::service::ServiceApi;
 use crate::{Config, TeamConfig};
 
+#[derive(Clone)]
 pub struct GameServer {
-  db: SqlitePool,
-  config: Config,
-  services: Vec<Arc<Mutex<Service>>>,
-  rng: StdRng,
+  shared: Arc<RwLock<Shared>>,
 }
 
 impl GameServer {
@@ -56,7 +55,7 @@ impl GameServer {
 
     // list the directory
     let read_dir = fs::read_dir(&config.services_dir)
-      .map_err(GameServerError::ListServices)?;
+      .context("could not read services dir")?;
     let mut services = Vec::new();
 
     for entry in read_dir {
@@ -101,7 +100,7 @@ impl GameServer {
       }
 
       let path = entry.path();
-      let service = match Service::load_from_dir(&config, &name, &path)
+      let service = match ServiceApi::load_from_dir(&config, &name, &path)
         .map_err(GameServerError::Service)
         .and_then(|service| {
           db.add_service(&models::Service {
@@ -138,16 +137,29 @@ impl GameServer {
       StdRng::seed_from_u64(now)
     };
 
-    let gameserver = GameServer {
+    let shared = Shared {
       db,
       config,
       services,
       rng,
     };
 
+    let gameserver = GameServer {
+      shared: Arc::new(RwLock::new(shared)),
+    };
+
     Ok(gameserver)
   }
+}
 
+struct Shared {
+  db: SqlitePool,
+  config: Config,
+  services: Vec<Arc<Mutex<ServiceApi>>>,
+  rng: StdRng,
+}
+
+impl Shared {
   pub fn get_config(&self) -> &Config {
     &self.config
   }
@@ -160,6 +172,7 @@ impl GameServer {
     self.db.clone()
   }
 
+  /// Run the check-up operation on each of the competitors' servers
   pub async fn check_up(
     &self,
     check_number: i32,
@@ -182,28 +195,25 @@ impl GameServer {
       let delay = self.rng.next_u64() % delay;
       let delay_duration = Duration::from_secs(delay);
       sleep(delay_duration).await;
-      // let delay_timer = Delay::new(Instant::now() + Duration::from_secs(delay.into()));
-      // let fut: Box<Future<Item = (), Error = GameServerError> + Send + Sync> =
-      // Box::new(delay_timer.map(|_| ()).map_err(GameServerError::Delay));
-      // let db = db.clone();
-
-      let svc_name = name.clone();
-
-      let insert_checkup = move |result: Result<_, _>| {
-        db.insert_checkup(check_number, now, team_id, svc_name, result.is_ok())
-          .map_err(GameServerError::Db)
-      };
 
       let svc_name = name.clone();
 
       let service = service_mux2.lock().unwrap();
       info!("check_up service={} team_id={}", name, team_id);
-      service
-        .check_up(target, log_dir)
-        .await
-        .map_err(GameServerError::CheckUp)?;
 
-      insert_checkup();
+      service.check_up(target, log_dir).await.with_context(|| {
+        format!("could not check up on service {svc_name} in team {team_id}")
+      })?;
+
+      dal::checkup::insert(
+        &self.db,
+        check_number,
+        now,
+        team_id,
+        svc_name,
+        result.is_ok(),
+      )
+      .await?;
     }))
     .map(|_| ())
     .map_err(|err| {
@@ -215,7 +225,6 @@ impl GameServer {
 
   pub async fn each_team(
     &self,
-    db: Db,
     tick: i32,
     team_id: i32,
     target: Ipv4Addr,
@@ -228,7 +237,7 @@ impl GameServer {
     let get_log_dir = get_log_dir.as_ref().to_path_buf();
     let set_log_dir = set_log_dir.as_ref().to_path_buf();
 
-    future::join_all(services.into_iter().map(move |service_mux| {
+    future::join_all(services.into_iter().map(move |service_mux| async {
       let mut rng = rand::thread_rng();
       let db = db.clone();
       let service_name = {
@@ -238,13 +247,10 @@ impl GameServer {
       let set_log_dir = set_log_dir.join(&service_name);
       let get_log_dir = get_log_dir.join(&service_name);
 
-      // choose a random delay
-      let delay = rng.next_u32() % delay;
-      let delay_timer =
-        Delay::new(Instant::now() + Duration::from_secs(delay.into()));
-      let mut fut2: Box<
-        Future<Item = (), Error = GameServerError> + Send + Sync,
-      > = Box::new(delay_timer.map(|_| ()).map_err(GameServerError::Delay));
+      // choose a random delay and sleep
+      let delay = self.rng.next_u64() % delay;
+      let delay_duration = Duration::from_secs(delay);
+      sleep(delay_duration).await;
 
       // there's no previous flag if the tick is 0
       if has_prev {
@@ -327,7 +333,9 @@ impl GameServer {
           let svc_name = service_name.clone();
           let set_flag = service
             .set_flag(target, flag, set_log_dir)
-            .map_err(GameServerError::SetFlag);
+            .await
+            .context("could not set flag")?;
+
           set_flag
             .and_then(insert_flag.clone())
             .or_else(move |err| insert_flag(None).and_then(|_| Err(err)))

@@ -3,23 +3,22 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use anyhow::Result;
 use chrono::{DateTime, Utc};
-use tokio::timer::Delay;
 
 use crate::GameServer;
 
-pub fn ticker(
-  gs: Arc<Mutex<GameServer>>,
-) -> impl Future<Item = (), Error = ()> {
+/// The main loop for checking competitors' server health status
+pub async fn ticker_loop(gameserver: GameServer) -> Result<()> {
   let (interval, log_directory) = {
-    let gs = gs.lock().unwrap();
+    let gs = gameserver.lock().unwrap();
     let config = gs.get_config();
     (config.check_period, config.log_directory.clone())
   };
 
   // get the latest tick number
   let check_number = {
-    let gs = gs.lock().unwrap();
+    let gs = gameserver.lock().unwrap();
     let db = gs.get_db();
     db.get_current_check()
   }
@@ -92,7 +91,7 @@ pub fn ticker(
         check_number,
         now,
         interval,
-        gs.clone(),
+        gameserver.clone(),
         log_directory.clone(),
       )
       .map(move |_| ((), check_number + 1)),

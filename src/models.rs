@@ -1,30 +1,28 @@
-use chrono::NaiveDateTime;
+use std::net::Ipv4Addr;
 
-use crate::schema::{check_ups, flags, services, teams};
+use chrono::{DateTime, Utc};
 
-#[derive(Queryable)]
+// use crate::schema::{check_ups, flags, services, teams};
+
 pub struct Tick {
   pub id: i32,
-  pub start_time: NaiveDateTime,
+  pub start_time: DateTime<Utc>,
   pub current_tick: i32,
   pub current_check: i32,
 }
 
-#[derive(Queryable)]
 pub struct Team {
   pub id: i32,
   pub arbitrary_bonus_points: i32,
-  pub ip: i32,
+  pub ip: Ipv4Addr,
 }
 
-#[derive(Insertable)]
-#[table_name = "teams"]
 pub struct NewTeam {
   pub id: i32,
   pub ip: i32,
 }
 
-#[derive(Debug, Queryable, Insertable)]
+#[derive(Debug)]
 pub struct Service {
   pub name: String,
   pub port: i32,
@@ -34,7 +32,7 @@ pub struct Service {
   pub up_score: i32,
 }
 
-#[derive(Clone, Debug, Queryable, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Flag {
   pub tick: i32,
   pub team_id: i32,
@@ -46,11 +44,16 @@ pub struct Flag {
   pub in_progress: bool,
   pub claimed_by: Option<i32>,
   pub defended: bool,
-  pub created: NaiveDateTime,
+  pub created: DateTime<Utc>,
 }
 
-#[derive(Insertable)]
-#[table_name = "flags"]
+impl Flag {
+  #[inline]
+  pub fn is_claimed(&self) -> bool {
+    self.claimed_by.is_some()
+  }
+}
+
 pub struct NewFlag {
   pub tick: i32,
   pub team_id: i32,
@@ -60,12 +63,12 @@ pub struct NewFlag {
   pub flag_id: Option<String>,
 }
 
-#[derive(Clone, Queryable, Insertable, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct CheckUp {
   pub id: i32,
   pub team_id: i32,
   pub service_name: String,
   pub in_progress: bool,
   pub up: bool,
-  pub timestamp: NaiveDateTime,
+  pub timestamp: DateTime<Utc>,
 }

@@ -1,15 +1,19 @@
 use axum::Json;
 use warp::Filter;
 
-use crate::Db;
-
 #[derive(Deserialize)]
 struct Form {
   team_id: i32,
   flag: String,
 }
 
-pub async fn submit_flag2(Json(payload): Json<Form>) {}
+pub async fn submit_flag2(Json(payload): Json<Form>) {
+  // Authentication is probably not needed for now, because submitting flags as
+  // someone else just sabotages yourself in the game
+  //
+  // If we're deploying into the world wide web tho, we would want some higher
+  // security to prevent abuse, etc.
+}
 
 #[deprecated]
 pub fn submit_flag() -> Resp!() {

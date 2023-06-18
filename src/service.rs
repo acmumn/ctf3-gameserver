@@ -10,10 +10,10 @@ use tokio::process::Command;
 use tokio::time;
 
 use crate::config::Config;
+use crate::utils::child_output_helper;
 
-/// A service runs on the competitors' machine and sends periodic updates to the
-/// gameserver.
-pub struct Service {
+/// The API to the services that run on the competitors' machine.
+pub struct ServiceApi {
   pub name: String,
   pub config: ServiceConfig,
 
@@ -51,7 +51,7 @@ macro_rules! optional_path {
   };
 }
 
-impl Service {
+impl ServiceApi {
   pub fn load_from_dir(
     config: &Config,
     name: impl AsRef<str>,
@@ -78,7 +78,7 @@ impl Service {
     optional_path!(let set_flag_path = (&config.set_flag_path, path.join("set_flag")));
     optional_path!(let check_up_path = (&config.check_up_path, path.join("check_up")));
 
-    let service = Service {
+    let service = ServiceApi {
       name: name.to_owned(),
       config,
       timeout: config.timeout,
@@ -104,8 +104,14 @@ impl Service {
       args.push(flag_id);
     }
 
-    let child_output =
-      child_output_helper(executable, &self.base_dir, &self.timeout).await?;
+    let child_output = child_output_helper(
+      executable,
+      &self.base_dir,
+      log_dir.as_ref(),
+      vec![],
+      &self.timeout,
+    )
+    .await?;
 
     let string = String::from_utf8(child_output.stdout)?;
     let string = string.trim().to_owned();
@@ -124,74 +130,54 @@ impl Service {
     let port = self.config.port;
 
     let args = vec![target.to_string(), port.to_string()];
-    let child = TimeoutCommand::new(
+
+    let child_output = child_output_helper(
       executable,
       &self.base_dir,
       log_dir.as_ref(),
       args,
-      Duration::from_secs(self.timeout as u64),
+      &self.timeout,
     )
-    .map_err(ServiceError::Spawn);
+    .await?;
 
-    future::result(child)
-      .and_then(|child| child.map_err(ServiceError::Subprocess))
-      .map(|_| ())
+    if !child_output.status.success() {
+      bail!("check output did not succeed")
+    }
+
+    Ok(())
   }
 
-  pub fn set_flag(
+  pub async fn set_flag(
     &self,
     target: Ipv4Addr,
     flag: impl AsRef<str>,
     log_dir: impl AsRef<Path>,
-  ) -> impl Future<Item = Option<String>, Error = ServiceError> {
+  ) -> Result<Option<String>> {
     let flag = flag.as_ref().to_owned();
     let executable = self.set_flag_path.to_owned();
     let port = self.config.port;
 
     let args = vec![target.to_string(), port.to_string(), flag];
-    let child = TimeoutCommand::new(
+    let timeout = Duration::from_secs(self.timeout as u64);
+    let child_output = child_output_helper(
       executable.clone(),
       &self.base_dir,
       log_dir.as_ref(),
       args.clone(),
-      Duration::from_secs(self.timeout as u64),
+      timeout,
     )
-    .map_err(ServiceError::Spawn);
-
-    future::result(child)
-      .and_then(|child| child.map_err(ServiceError::Subprocess))
-      .and_then(|output| {
-        String::from_utf8(output)
-          .map(|output| {
-            let output = output.trim().to_owned();
-            if !output.is_empty() {
-              Some(output)
-            } else {
-              None
-            }
-          })
-          .map_err(ServiceError::DecodeOutput)
-      })
-  }
-}
-
-async fn child_output_helper(
-  executable: impl AsRef<Path>,
-  working_directory: impl AsRef<Path>,
-  log_directory: impl AsRef<Path>,
-  timeout: Duration,
-) -> Result<Output> {
-  let child_future = Command::new(executable.as_ref())
-    .current_dir(working_directory.as_ref())
-    .stdin(Stdio::null())
-    .stderr(Stdio::inherit())
-    .stdout(Stdio::piped())
-    .spawn()
-    .context("could not spawn child")?;
-
-  let child_output = time::timeout(timeout, child_future.wait_with_output())
     .await
-    .context("child execution failed")??;
+    .context("could not call set flag child")?;
 
-  Ok(child_output)
+    let output_string = String::from_utf8(child_output.stdout)
+      .context("set flag output invalid utf8")?;
+
+    let output_trim = output_string.trim();
+
+    Ok(if output_trim.is_empty() {
+      None
+    } else {
+      Some(output_trim.to_owned())
+    })
+  }
 }

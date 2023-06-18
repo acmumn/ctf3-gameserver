@@ -1,10 +1,11 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use anyhow::{Context, Result};
+use futures::future;
 use gameserver::{check_up, flag_io, setup_logging};
 use gameserver::{Config, Db, GameServer};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -52,17 +53,22 @@ async fn main() -> Result<()> {
     Command::Run => {
       let bind_addr = config.bind_addr;
 
-      let gameserver =
-        GameServer::new(config.clone()).expect("couldn't load gameserver");
-      let gameserver = Arc::new(Mutex::new(gameserver));
+      let gameserver = GameServer::new(config.clone(), db.clone())
+        .await
+        .context("couldn't load gameserver")?;
 
-      let check_up = check_up::ticker(gameserver.clone());
       let flag_io = flag_io::ticker(gameserver.clone());
+
+      let handles = vec![
+        tokio::spawn(check_up::ticker_loop(gameserver.clone())),
+        tokio::spawn(flag_io),
+      ];
 
       thread::spawn(move || {
         gameserver::web::run(config, bind_addr, db);
       });
-      tokio::run(check_up.join(flag_io).map(|_| ()));
+
+      future::join_all(handles).await;
     }
   }
 
