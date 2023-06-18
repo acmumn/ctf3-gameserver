@@ -20,6 +20,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use crate::dal;
+use crate::dal::team::TeamId;
 use crate::dal::Db;
 use crate::key::generate_flag;
 use crate::models::{self, Flag, NewFlag};
@@ -28,6 +29,7 @@ use crate::{Config, TeamConfig};
 
 #[derive(Clone)]
 pub struct GameServer {
+  config: Arc<Config>,
   db: Db,
   shared: Arc<RwLock<Shared>>,
 }
@@ -41,7 +43,7 @@ impl GameServer {
     }
 
     // clear in-progress flags
-    let current_tick = dal::tick::current_tick(&db)
+    let current_tick = dal::tick::current(&db)
       .await
       .context("could not get current tick")?;
     dal::tick::clear_in_progress(&db, current_tick)
@@ -132,9 +134,10 @@ impl GameServer {
       })
       .collect();
 
-    let shared = Shared { config, services };
+    let shared = Shared { services };
 
     let gameserver = GameServer {
+      config: Arc::new(config),
       db,
       shared: Arc::new(RwLock::new(shared)),
     };
@@ -150,7 +153,7 @@ impl GameServer {
   pub async fn each_team(
     &self,
     tick: i32,
-    team_id: i32,
+    team_id: TeamId,
     target: Ipv4Addr,
     has_prev: bool,
     get_log_dir: impl AsRef<Path>,
@@ -277,28 +280,13 @@ impl GameServer {
     }))
     .map(|_| ())
   }
-}
-
-struct Shared {
-  config: Config,
-  services: Vec<Arc<Mutex<ServiceApi>>>,
-}
-
-impl Shared {
-  pub fn get_config(&self) -> &Config {
-    &self.config
-  }
-
-  pub fn get_teams(&self) -> Vec<TeamConfig> {
-    self.config.teams.clone()
-  }
 
   /// Run the check-up operation on each of the competitors' servers
   pub async fn check_up(
     &self,
     check_number: i32,
     now: DateTime<Utc>,
-    team_id: i32,
+    team_id: TeamId,
     target: Ipv4Addr,
     log_dir: impl AsRef<Path>,
   ) -> Result<()> {
@@ -343,5 +331,19 @@ impl Shared {
     });
 
     Ok(())
+  }
+}
+
+struct Shared {
+  services: Vec<Arc<Mutex<ServiceApi>>>,
+}
+
+impl Shared {
+  pub fn get_config(&self) -> &Config {
+    &self.config
+  }
+
+  pub fn get_teams(&self) -> Vec<TeamConfig> {
+    self.config.teams.clone()
   }
 }

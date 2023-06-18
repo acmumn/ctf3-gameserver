@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::{
   ffi::OsStr,
   fmt,
@@ -7,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use serde::{de, Serializer};
+use serde::{de, Deserialize, Serialize, Serializer};
 use tokio::{process::Command, time};
 
 /// Run a child process with a timeout and the specified common args
@@ -38,35 +39,41 @@ where
   Ok(child_output)
 }
 
-// https://github.com/ramsayleung/rspotify/issues/163#issuecomment-743719039
+/// Integer number of seconds that can be decoded from serde
+#[derive(Copy, Clone, Debug)]
+pub struct Seconds(pub Duration);
 
-struct DurationVisitor;
+impl Deref for Seconds {
+  type Target = Duration;
 
-impl<'de> de::Visitor<'de> for DurationVisitor {
-  type Value = Duration;
-
-  fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-    write!(formatter, "number of seconds")
+  fn deref(&self) -> &Self::Target {
+    &self.0
   }
+}
 
-  fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+impl Into<Duration> for Seconds {
+  fn into(self) -> Duration {
+    self.0
+  }
+}
+
+impl Serialize for Seconds {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
-    E: de::Error,
+    S: Serializer,
   {
-    Ok(Duration::from_secs(v))
+    let seconds = self.0.as_secs();
+    seconds.serialize(serializer)
   }
 }
 
-pub fn from_duration_sec<'de, D>(d: D) -> Result<Duration, D::Error>
-where
-  D: de::Deserializer<'de>,
-{
-  d.deserialize_u64(DurationVisitor)
-}
-
-pub fn to_duration_sec<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
-where
-  S: Serializer,
-{
-  s.serialize_u64(x.as_millis() as u64)
+impl<'de> Deserialize<'de> for Seconds {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let seconds = u64::deserialize(deserializer)?;
+    let duration = Duration::from_secs(seconds);
+    Ok(Seconds(duration))
+  }
 }

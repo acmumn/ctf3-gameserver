@@ -3,8 +3,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use chrono::{DateTime, Utc};
+use futures::future;
 use tokio::time::sleep;
 
 use crate::{dal, game, GameServer};
@@ -49,38 +50,35 @@ async fn check_iter_helper(
   gameserver: GameServer,
   log_directory: impl AsRef<Path>,
 ) -> Result<()> {
+  let db = gameserver.database();
+
   // Get a list of all teams
-  let teams = dal::team::get_all(gameserver.database()).await?;
+  let teams = dal::team::get_all(&db).await?;
 
-  for team in teams {
-    // log dir
-    let log_dir = log_directory
-      .as_ref()
-      .join("check_up")
-      .join(format!("team_{}", team.id));
-    if !log_dir.exists() {
-      fs::create_dir_all(&log_dir);
+  let log_directory = log_directory.as_ref().to_path_buf();
+  let futures = teams.into_iter().map(move |team| {
+    let log_directory = log_directory.clone();
+    let gameserver = gameserver.clone();
+
+    async move {
+      // log dir
+      let log_dir = log_directory.join("check_up").join(team.id.to_string());
+
+      if !log_dir.exists() {
+        fs::create_dir_all(&log_dir);
+      }
+
+      gameserver
+        .check_up(check_number, now, team.id, team.ip, log_dir)
+        .await?;
+
+      Ok::<_, Error>(())
     }
+  });
 
-    let gs = gameserver.clone();
-    let gs = gs.lock().unwrap();
-    let db = gs.get_db();
+  future::join_all(futures).await;
 
-    fut = Box::new(
-      fut
-        .join(gs.check_up(db, check_number, now, team.id, team.ip, log_dir))
-        .map(|_| ()),
-    );
-  }
-
-  fut = Box::new(fut.and_then(move |_| {
-    let gs = gameserver.clone();
-    let gs = gs.lock().unwrap();
-    let db = gs.get_db();
-    db.bump_checks().map_err(|err| {
-      error!("Failed to bump tick: {}", err);
-    })
-  }));
+  dal::checkup::bump(&db).await?;
 
   Ok(())
 }

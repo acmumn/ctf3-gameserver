@@ -103,7 +103,9 @@ async fn team_iter(
     Ok(())
   });
 
-  future::join_all(futures).await?;
+  future::join_all(futures).await;
 
   dal::tick::bump(&db);
+
+  Ok(())
 }

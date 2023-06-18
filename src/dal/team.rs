@@ -1,15 +1,22 @@
-use std::net::Ipv4Addr;
+use std::{fmt, net::Ipv4Addr};
 
 use anyhow::{Context, Result};
-use sqlx::{Connection, Executor};
+use sqlx::{Connection, Executor, Row};
 
 use crate::models::Team;
 
 use super::Db;
 
+#[derive(Debug)]
 pub(crate) struct TeamId(pub(in crate::dal) u32);
 
-pub async fn create(db: Db, team_id: u32, team_ip: Ipv4Addr) -> Result<Team> {
+impl fmt::Display for TeamId {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<Team {}>", self.0)
+  }
+}
+
+pub async fn create(db: &Db, team_id: u32, team_ip: Ipv4Addr) -> Result<Team> {
   let team_ip_int = u32::from(team_ip);
 
   sqlx::query(
@@ -31,6 +38,18 @@ pub async fn create(db: Db, team_id: u32, team_ip: Ipv4Addr) -> Result<Team> {
   })
 }
 
-pub async fn get_all(db: impl Connection) -> Result<Vec<Team>> {
-  todo!()
+pub async fn get_all(db: &Db) -> Result<Vec<Team>> {
+  Ok(
+    sqlx::query("SELECT * FROM teams")
+      .fetch_all(db)
+      .await
+      .context("could not fetch all teams")?
+      .into_iter()
+      .map(|row| Team {
+        id: TeamId(row.get::<u32, _>("id")),
+        arbitrary_bonus_points: row.get("arbitrary_bonus_points"),
+        ip: Ipv4Addr::from(row.get::<u32, _>("ip")),
+      })
+      .collect(),
+  )
 }

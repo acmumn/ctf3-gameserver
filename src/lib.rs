@@ -3,8 +3,6 @@ pub extern crate tokio;
 #[macro_use]
 extern crate anyhow;
 #[macro_use]
-extern crate derive_more;
-#[macro_use]
 extern crate tracing;
 #[macro_use]
 extern crate serde;
@@ -17,6 +15,7 @@ mod config;
 pub mod controllers;
 pub mod core;
 pub mod dal;
+pub mod entities;
 mod game;
 mod key;
 pub mod models;

@@ -4,11 +4,12 @@ version = "0.1.0"
 authors = ["Michael Zhang <iptq@protonmail.com>"]
 edition = "2021"
 
+[workspace]
+
 [dependencies]
 anyhow = "1.0.71"
 axum = "0.6.18"
 chrono = { version = "0.4", features = ["serde"] }
-derive_more = "0.99"
 futures = "0.3.28"
 hmac = "0.12"
 lazy_static = "1.4"

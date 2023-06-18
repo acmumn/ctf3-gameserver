@@ -1,6 +1,12 @@
 use anyhow::Result;
 use sqlx::Executor;
 
-pub async fn insert(e: impl Executor<'_>, tick: i32) -> Result<()> {
+use super::Db;
+
+pub async fn insert(db: &Db) -> Result<()> {
+  todo!()
+}
+
+pub async fn bump(db: &Db) -> Result<()> {
   todo!()
 }

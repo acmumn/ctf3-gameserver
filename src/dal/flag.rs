@@ -17,10 +17,10 @@ pub async fn get_last_flag(db: &Db) -> Result<Flag> {
   todo!()
 }
 
-pub async fn find_by_flag(db: impl Connection, as_ref: &str) -> Result<Flag> {
+pub async fn find_by_flag(db: &Db, as_ref: &str) -> Result<Flag> {
   todo!()
 }
 
-pub async fn submit(db: impl Connection, team_id: TeamId) -> Result<Flag> {
+pub async fn submit(db: &Db, team_id: TeamId) -> Result<Flag> {
   todo!()
 }
